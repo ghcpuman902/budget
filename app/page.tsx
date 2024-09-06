@@ -1,112 +1,251 @@
-'use client';
-import { useState } from 'react';
-import { generate } from './actions';
-import { readStreamableValue } from 'ai/rsc';
-import { useSubscriptions } from './localStorageUtils';
-import { columns } from '@/components/subscriptions/columns';
-import { DataTable } from '@/components/subscriptions/components/DataTable';
-import { Subscription, PartialSubscription, subscriptionSchema } from '@/components/subscriptions/types';
-import { Button } from '@/components/ui/button';
-import { Textarea } from '@/components/ui/textarea';
+'use client'
 
-export const maxDuration = 30;
+import { useState, useEffect, useRef } from 'react'
+import { experimental_useObject as useObject } from 'ai/react'
+import { z } from 'zod'
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table"
+import { Textarea } from "@/components/ui/textarea"
+import { Checkbox } from "@/components/ui/checkbox"
+import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
+import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog"
+import { Label } from "@/components/ui/label"
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select"
+import { v4 as uuidv4 } from 'uuid'
+import { subscriptionSchema, Subscription } from '@/components/subscriptions/types'
+import { PlusCircle, Edit, Trash2, ArrowUpDown } from 'lucide-react'
 
-export default function Home() {
-  const [generation, setGeneration] = useState<string>('');
-  const [input, setInput] = useState<string>(`Payment details
-Vercel Inc.
-Expected on the 23rd
+const responseSchema = z.object({
+  listOfSubscriptions: z.array(subscriptionSchema)
+})
 
-£15.18
-5 paymentsMonthly
+type ResponseData = z.infer<typeof responseSchema>
 
-Total £137.79
+export default function RecurringPayments() {
+  const [prompt, setPrompt] = useState(``)
+  const [completeData, setCompleteData] = useState<(Subscription & { dealt: boolean })[]>([])
+  const [partialData, setPartialData] = useState<(Subscription & { dealt: boolean })[]>([])
+  const idMapRef = useRef<Map<string, string>>(new Map())
 
-Paid from
+  const { isLoading, object: streamingData, submit, error } = useObject<ResponseData>({
+    api: '/api/generate-recurring-payments',
+    schema: responseSchema,
+  })
 
-HAO-TSUN KUO
-Sort code:04-00-04Account number:45711660
+  useEffect(() => {
+    const savedData = localStorage.getItem('recurringPaymentsData')
+    if (savedData) {
+      setCompleteData(JSON.parse(savedData))
+    }
+  }, [])
 
-Payment history
+  useEffect(() => {
+    if (streamingData?.listOfSubscriptions) {
+      const subscriptionsWithConsistentIds = streamingData.listOfSubscriptions
+        .filter((s): s is Subscription => !!s)
+        .map(subscription => {
+          const existingId = idMapRef.current.get(subscription.id)
+          if (existingId) {
+            return { ...subscription, id: existingId, dealt: false }
+          }
+          const newId = uuidv4()
+          idMapRef.current.set(subscription.id, newId)
+          return { ...subscription, id: newId, dealt: false }
+        });
+      setPartialData(subscriptionsWithConsistentIds);
+    }
+  }, [streamingData])
 
-Vercel Inc.
-Tue 27 Aug 2024
-£15.18
-
-Vercel Inc.
-Fri 23 Aug 2024
-£24.48
-
-Vercel Inc.
-Tue 23 Jul 2024
-£24.84
-
-Vercel Inc.
-Sun 23 Jun 2024
-£23.77
-
-Vercel Inc.
-Thu 23 May 2024
-£25.19
-
-Vercel Inc.
-Tue 23 Apr 2024
-£24.33`);
-
-  const [partialSubscriptions, setPartialSubscriptions] = useState<PartialSubscription[]>([]);
-  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
-  const { addSubscription } = useSubscriptions();
+  const [editingSubscription, setEditingSubscription] = useState<Subscription | null>(null)
+  const [filter, setFilter] = useState<'all' | 'active' | 'inactive'>('all')
 
   const handleSubmit = async (e: React.FormEvent) => {
-    e.preventDefault();
-    try {
-      const { object } = await generate(input);
-      const fullSubscriptions: Subscription[] = [];
-      for await (const partialObject of readStreamableValue(object)) {
-        if (partialObject) {
-          const subscription: PartialSubscription = createPartialSubscription(partialObject);
-          setPartialSubscriptions(prev => [...prev, subscription]);
-          if (isFullSubscription(subscription)) {
-            fullSubscriptions.push(subscription as Subscription);
-            addSubscription(subscription as Subscription);
-          }
-        }
-      }
-      setSubscriptions(fullSubscriptions);
-    } catch (error) {
-      console.error("Error generating subscription:", error);
+    e.preventDefault()
+    setPartialData([])
+    idMapRef.current.clear()
+    await submit(prompt)
+  }
+
+  // Add this useEffect to move partialData to completeData when loading is done
+  useEffect(() => {
+    if (!isLoading && partialData.length > 0) {
+      setCompleteData(prevData => [...prevData, ...partialData])
+      setPartialData([])
     }
+  }, [isLoading, partialData])
+
+  const handleCheckboxChange = (id: string) => {
+    setCompleteData(prevData =>
+      prevData.map(sub =>
+        sub.id === id ? { ...sub, dealt: !sub.dealt } : sub
+      )
+    )
+  }
+
+  const handleSave = () => {
+    localStorage.setItem('recurringPaymentsData', JSON.stringify(completeData))
+  }
+
+  const handleClearStorage = () => {
+    localStorage.removeItem('recurringPaymentsData')
+    setCompleteData([])
+  }
+
+  const handleEdit = (subscription: Subscription) => {
+    setEditingSubscription(subscription)
+  }
+
+  const handleSaveEdit = (updatedSubscription: Subscription) => {
+    setCompleteData(prevData =>
+      prevData.map(sub => sub.id === updatedSubscription.id 
+        ? { ...updatedSubscription, dealt: sub.dealt }
+        : sub
+      )
+    )
+    setEditingSubscription(null)
+  }
+
+  const handleDelete = (id: string) => {
+    setCompleteData(prevData => prevData.filter(sub => sub.id !== id));
   };
 
-  const createPartialSubscription = (partialObject: any): PartialSubscription => {
-    const subscription: PartialSubscription = {};
-    for (const key of Object.keys(subscriptionSchema.shape)) {
-      if (partialObject[key] !== undefined) {
-        subscription[key as keyof Subscription] = partialObject[key];
-      }
-    }
-    return subscription;
-  };
+  const displayData = [...completeData, ...partialData]
 
-  const isFullSubscription = (sub: PartialSubscription): sub is Subscription => {
-    return subscriptionSchema.safeParse(sub).success;
-  };
+  const filteredData = displayData.filter(sub => {
+    if (filter === 'all') return true
+    if (filter === 'active') return sub.isActive
+    if (filter === 'inactive') return !sub.isActive
+    return true
+  })
+
+  const totalAmount = filteredData.reduce((sum, sub) => sum + (sub.amount || 0), 0)
 
   return (
-    <div className="p-4 rounded shadow-md">
-      <form onSubmit={handleSubmit} className="space-y-4">
-        <Textarea
-          value={input}
-          onChange={(e) => setInput(e.target.value)}
-          rows={10}
-          className="w-full"
-        />
-        <Button type="submit" className="w-full">Generate Subscription</Button>
-      </form>
-      <pre className="mt-4 p-2 rounded">{generation}</pre>
-      <h2 className="mt-6 text-xl font-semibold">Stored Subscriptions</h2>
-      <DataTable columns={columns} data={partialSubscriptions} />
-      {subscriptions.length > 0 && <DataTable columns={columns} data={subscriptions} />}
-    </div>
-  );
+    <Card className="w-full max-w-4xl mx-auto">
+      <CardHeader>
+        <CardTitle>Subscription Payment Manager</CardTitle>
+        <CardDescription>Manage your recurring payments and subscriptions</CardDescription>
+      </CardHeader>
+      <CardContent className="space-y-6">
+        <div className="flex flex-col space-y-2">
+          <Label htmlFor="prompt">Generate Subscriptions</Label>
+          <Textarea
+            id="prompt"
+            value={prompt}
+            onChange={(e) => setPrompt(e.target.value)}
+            placeholder="Customize your subscription list (e.g., 'Generate 5 monthly subscriptions for streaming services')"
+            className="min-h-[100px]"
+          />
+          <Button
+            onClick={handleSubmit}
+            disabled={isLoading}
+            className="w-full sm:w-auto"
+          >
+            {isLoading ? 'Creating Subscriptions...' : 'Generate Subscriptions'}
+          </Button>
+        </div>
+
+        <div className="flex flex-col sm:flex-row justify-between items-center space-y-2 sm:space-y-0 sm:space-x-2">
+          <Select value={filter} onValueChange={(value: any) => setFilter(value)}>
+            <SelectTrigger className="w-[180px]">
+              <SelectValue placeholder="Filter subscriptions" />
+            </SelectTrigger>
+            <SelectContent>
+              <SelectItem value="all">All Subscriptions</SelectItem>
+              <SelectItem value="active">Active</SelectItem>
+              <SelectItem value="inactive">Inactive</SelectItem>
+            </SelectContent>
+          </Select>
+          <div className="flex space-x-2">
+            <Button onClick={handleSave} disabled={isLoading}>
+              Save Progress
+            </Button>
+            <Button
+              variant="destructive"
+              onClick={() => {
+                if (window.confirm('Are you sure you want to clear all saved data? This action cannot be undone.')) {
+                  handleClearStorage();
+                }
+              }}
+            >
+              Clear Saved Data
+            </Button>
+          </div>
+        </div>
+
+        {error && <p className="text-red-500 mb-4">Error: {error.message}</p>}
+
+        <div className="overflow-x-auto">
+          <Table>
+            <TableHeader>
+              <TableRow>
+                <TableHead>Status</TableHead>
+                <TableHead>Service</TableHead>
+                <TableHead>Cost</TableHead>
+                <TableHead className="hidden sm:table-cell">Billing Cycle</TableHead>
+                <TableHead className="hidden sm:table-cell">Next Charge</TableHead>
+                <TableHead>Actions</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {filteredData.map((subscription, index) => (
+                <TableRow key={`${subscription?.id}-${index}`} className={isLoading && index >= completeData.length ? "animate-pulse" : ""}>
+                  <TableCell>
+                    <Checkbox
+                      checked={subscription?.dealt ?? false}
+                      onCheckedChange={() => handleCheckboxChange(subscription.id)}
+                      disabled={index >= completeData.length}
+                    />
+                  </TableCell>
+                  <TableCell>{subscription?.name ?? ''}</TableCell>
+                  <TableCell>{`${subscription?.amount ?? ''} ${subscription?.currency ?? ''}`}</TableCell>
+                  <TableCell className="hidden sm:table-cell">{subscription?.frequency ?? ''}</TableCell>
+                  <TableCell className="hidden sm:table-cell">{subscription?.nextPaymentDate ?? ''}</TableCell>
+                  <TableCell>
+                    <div className="flex space-x-2">
+                      <Button variant="ghost" size="icon" onClick={() => handleEdit(subscription)}>
+                        <Edit className="h-4 w-4" />
+                      </Button>
+                      <Button variant="ghost" size="icon" onClick={() => handleDelete(subscription.id)}>
+                        <Trash2 className="h-4 w-4" />
+                      </Button>
+                    </div>
+                  </TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </div>
+
+        <div className="flex justify-between items-center">
+          <p className="font-semibold">Total Monthly Cost: {totalAmount.toFixed(2)} {filteredData[0]?.currency}</p>
+          <Dialog>
+            <DialogTrigger asChild>
+              <Button><PlusCircle className="h-4 w-4 mr-2" />Add Subscription</Button>
+            </DialogTrigger>
+            <DialogContent>
+              <DialogHeader>
+                <DialogTitle>Add New Subscription</DialogTitle>
+              </DialogHeader>
+              {/* Add subscription form here */}
+            </DialogContent>
+          </Dialog>
+        </div>
+
+        {isLoading && (
+          <p className="mt-4 text-gray-600">Creating your personalized subscription list...</p>
+        )}
+      </CardContent>
+
+      <Dialog open={!!editingSubscription} onOpenChange={(open) => !open && setEditingSubscription(null)}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle>Edit Subscription</DialogTitle>
+          </DialogHeader>
+          {/* Edit subscription form here */}
+        </DialogContent>
+      </Dialog>
+    </Card>
+  )
 }

@@ -46,7 +46,7 @@ const responseSchema = z.object({
 
 export async function POST(req: Request) {
   const prompt = await req.json();
-  console.log(prompt);
+  // console.log(prompt);
   const result = await streamObject({
     model: openai('gpt-4o'),
     schema: responseSchema,

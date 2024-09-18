@@ -25,6 +25,14 @@ const responseSchema = z.object({
 
 type ResponseData = z.infer<typeof responseSchema>
 
+function formatDate(date: Date | string | undefined): string {
+  if (!date) return '';
+  const dateObject = typeof date === 'string' ? new Date(date) : date;
+  return dateObject instanceof Date && !isNaN(dateObject.getTime())
+    ? dateObject.toISOString().split('T')[0]
+    : '';
+}
+
 export default function RecurringPayments() {
   const [prompt, setPrompt] = useState(``)
   const [completeData, setCompleteData] = useState<(Subscription & { dealt: boolean })[]>([])
@@ -274,13 +282,13 @@ export default function RecurringPayments() {
                     <TableCell>{subscription?.name ?? ''}</TableCell>
                     <TableCell>{`${subscription?.amount ?? ''} ${subscription?.currency ?? ''}`}</TableCell>
                     <TableCell className="hidden md:table-cell">{subscription?.frequency ?? ''}</TableCell>
-                    <TableCell className="hidden lg:table-cell">{subscription?.nextPaymentDate ?? ''}</TableCell>
+                    <TableCell className="hidden lg:table-cell">{formatDate(subscription?.nextPaymentDate)}</TableCell>
                     <TableCell>
                       {getPaymentMethodIcon(subscription?.paymentMethodDetails?.type ?? '')}
                       {`${getReadablePaymentMethod(subscription?.paymentMethodDetails?.type ?? '')} ${subscription?.paymentMethodDetails?.details ? `(${subscription.paymentMethodDetails.details})` : ''}`}
                     </TableCell>
-                    <TableCell className="hidden xl:table-cell">{subscription?.firstPaymentDate ?? ''}</TableCell>
-                    <TableCell className="hidden xl:table-cell">{subscription?.expectedEndDate ?? ''}</TableCell>
+                    <TableCell className="hidden xl:table-cell">{formatDate(subscription?.firstPaymentDate)}</TableCell>
+                    <TableCell className="hidden xl:table-cell">{formatDate(subscription?.expectedEndDate)}</TableCell>
                     <TableCell>
                       {!isGenerating && (
                         <div className="flex space-x-2">

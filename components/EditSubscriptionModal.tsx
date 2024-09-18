@@ -32,6 +32,14 @@ export function EditSubscriptionModal({ subscription, onSave, onClose }: EditSub
     setEditedSubscription(prev => ({ ...prev!, [name]: value }))
   }
 
+  function formatDate(date: Date | string | undefined): string {
+    if (!date) return '';
+    const dateObject = typeof date === 'string' ? new Date(date) : date;
+    return dateObject instanceof Date && !isNaN(dateObject.getTime())
+      ? dateObject.toISOString().split('T')[0]
+      : '';
+  }
+  
   const handleSwitchChange = (name: string, checked: boolean) => {
     setEditedSubscription(prev => ({ ...prev!, [name]: checked }))
   }
@@ -100,15 +108,15 @@ export function EditSubscriptionModal({ subscription, onSave, onClose }: EditSub
             </div>
             <div>
               <Label htmlFor="nextPaymentDate">Next Payment Date</Label>
-              <Input id="nextPaymentDate" name="nextPaymentDate" type="date" value={editedSubscription.nextPaymentDate} onChange={handleInputChange} />
+              <Input id="nextPaymentDate" name="nextPaymentDate" type="date" value={formatDate(editedSubscription.nextPaymentDate)} onChange={handleInputChange} />
             </div>
             <div>
               <Label htmlFor="firstPaymentDate">First Payment Date</Label>
-              <Input id="firstPaymentDate" name="firstPaymentDate" type="date" value={editedSubscription.firstPaymentDate} onChange={handleInputChange} />
+              <Input id="firstPaymentDate" name="firstPaymentDate" type="date" value={formatDate(editedSubscription.firstPaymentDate)} onChange={handleInputChange} />
             </div>
             <div>
               <Label htmlFor="expectedEndDate">Expected End Date</Label>
-              <Input id="expectedEndDate" name="expectedEndDate" type="date" value={editedSubscription.expectedEndDate} onChange={handleInputChange} />
+              <Input id="expectedEndDate" name="expectedEndDate" type="date" value={formatDate(editedSubscription.expectedEndDate)} onChange={handleInputChange} />
             </div>
           </div>
           

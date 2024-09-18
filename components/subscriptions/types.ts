@@ -13,7 +13,7 @@ export const subscriptionSchema = z.object({
         z.literal("quarterly"),
         z.literal("annually")
     ]),
-    nextPaymentDate: z.string(),
+    nextPaymentDate: z.coerce.date(),
     paymentMethodDetails: z.object({
         type: z.enum([
             "direct_debit",
@@ -34,10 +34,13 @@ export const subscriptionSchema = z.object({
         ]),
         details: z.string().optional(),
     }),
-    firstPaymentDate: z.string(),
-    expectedEndDate: z.string().optional(),
+    // coerce attempts to convert the input to a Date object
+    // This allows flexibility in input (e.g., string, number) while ensuring a Date output
+    firstPaymentDate: z.coerce.date(),
+    expectedEndDate: z.coerce.date().optional(),
     pastPayments: z.array(z.object({
-        date: z.string(),
+        // coerce.date() will convert string or number inputs to Date objects
+        date: z.coerce.date(),
         amount: z.number()
     })).optional(),
     bankHolidays: z.array(z.string()).optional(),

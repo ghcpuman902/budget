@@ -3,6 +3,8 @@ import { Inter } from "next/font/google";
 import "./globals.css";
 import { ThemeProvider } from "@/components/theme-provider";
 import { ModeToggle } from "@/components/ModeToggle";
+import { Tabs, TabsList, TabsTrigger, TabsContent } from "@/components/ui/tabs"
+import Link from "next/link"
 
 const inter = Inter({ subsets: ["latin"] });
 
@@ -13,9 +15,13 @@ export const metadata: Metadata = {
 
 export default function RootLayout({
   children,
-}: Readonly<{
+  regularPayments,
+  costPrediction,
+}: {
   children: React.ReactNode;
-}>) {
+  regularPayments: React.ReactNode;
+  costPrediction: React.ReactNode;
+}) {
   return (
     <html lang="en">
       <body className={inter.className}>
@@ -26,10 +32,27 @@ export default function RootLayout({
           disableTransitionOnChange
         >
           <div className="container mx-auto p-4">
-            <header className="flex justify-end p-4">
-              <ModeToggle />
+            <header className="flex justify-between items-center p-4">
+              <h1 className="text-2xl font-bold">Payment Management</h1>
+              {/* <ModeToggle /> */}
             </header>
-            {children}
+            <Tabs defaultValue="regular" className="w-full">
+              <TabsList>
+                <TabsTrigger value="regular">
+                  Regular Payments
+                </TabsTrigger>
+                <TabsTrigger value="prediction">
+                  Cost Prediction
+                </TabsTrigger>
+              </TabsList>
+              <TabsContent value="regular">
+                {regularPayments}
+              </TabsContent>
+              <TabsContent value="prediction">
+                {costPrediction}
+              </TabsContent>
+            </Tabs>
+            {/* {children} */}
           </div>
         </ThemeProvider>
       </body>
